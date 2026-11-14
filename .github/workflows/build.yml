@@ -20,14 +20,33 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Unit tests (timing, decoder, spaced repetition, Koch, audio)
+        shell: bash
         run: |
           chmod +x gradlew
-          ./gradlew :core:test --stacktrace
+          ./gradlew :core:test 2>&1 | tee test.log
 
       - name: Build signed release APK
-        run: ./gradlew :app:assembleRelease --stacktrace
+        shell: bash
+        # --refresh-dependencies: never trust a cached "this module is missing" answer.
+        run: ./gradlew :app:assembleRelease --refresh-dependencies 2>&1 | tee build.log
+
+      # Puts the reason for a failed build on the run's summary page, so it can be read
+      # without opening the full log.
+      - name: Report build errors
+        if: failure()
+        shell: bash
+        run: |
+          for f in test.log build.log; do
+            [ -f "$f" ] || continue
+            grep -E "^e: |^w: .*error|error: " "$f" | head -n 8 | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            what="$(awk '/\* What went wrong:/{p=1;next} /\* Try:/{p=0} p' "$f" | head -n 25 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"
+            if [ -n "$what" ]; then echo "::error title=What went wrong ($f)::${what}"; fi
+          done
 
       - name: Verify the APK requests no INTERNET permission
+        shell: bash
         run: |
           APK=app/build/outputs/apk/release/app-release.apk
           AAPT2="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/aapt2"
