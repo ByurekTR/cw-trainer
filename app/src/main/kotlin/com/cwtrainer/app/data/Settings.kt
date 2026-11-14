@@ -31,7 +31,39 @@ data class Settings(
     val sendWpm: Int = 15,
     val swapPaddles: Boolean = false,
     val lastDrill: String = "",
+    val listenMinutes: Int = 20,
+    val listenGapSec: Int = 3,
+    val listenReveal: Boolean = true,
 ) {
+    /** Plain key/value form for the JSON backup. */
+    fun toMap(): Map<String, String> = linkedMapOf(
+        "charWpm" to charWpm.toString(), "effOverride" to effOverride.toString(), "pitchHz" to pitchHz.toString(),
+        "groupLength" to groupLength.toString(), "sessionMinutes" to sessionMinutes.toString(), "band" to band,
+        "fist" to fist.toString(), "haptics" to haptics.toString(), "kochLevel" to kochLevel.toString(),
+        "sendIambic" to sendIambic.toString(), "sendWpm" to sendWpm.toString(), "swapPaddles" to swapPaddles.toString(),
+        "listenMinutes" to listenMinutes.toString(), "listenGapSec" to listenGapSec.toString(),
+        "listenReveal" to listenReveal.toString(),
+    )
+
+    /** Applies a backup's settings on top of these; unknown or unreadable keys keep their current value. */
+    fun withMap(m: Map<String, String>): Settings = copy(
+        charWpm = m["charWpm"]?.toIntOrNull() ?: charWpm,
+        effOverride = m["effOverride"]?.toFloatOrNull() ?: effOverride,
+        pitchHz = m["pitchHz"]?.toIntOrNull() ?: pitchHz,
+        groupLength = m["groupLength"]?.toIntOrNull() ?: groupLength,
+        sessionMinutes = m["sessionMinutes"]?.toIntOrNull() ?: sessionMinutes,
+        band = m["band"] ?: band,
+        fist = m["fist"]?.toBooleanStrictOrNull() ?: fist,
+        haptics = m["haptics"]?.toBooleanStrictOrNull() ?: haptics,
+        kochLevel = m["kochLevel"]?.toIntOrNull() ?: kochLevel,
+        sendIambic = m["sendIambic"]?.toBooleanStrictOrNull() ?: sendIambic,
+        sendWpm = m["sendWpm"]?.toIntOrNull() ?: sendWpm,
+        swapPaddles = m["swapPaddles"]?.toBooleanStrictOrNull() ?: swapPaddles,
+        listenMinutes = m["listenMinutes"]?.toIntOrNull() ?: listenMinutes,
+        listenGapSec = m["listenGapSec"]?.toIntOrNull() ?: listenGapSec,
+        listenReveal = m["listenReveal"]?.toBooleanStrictOrNull() ?: listenReveal,
+    )
+
     /** Effective speed actually used for copy drills. */
     fun effectiveWpm(level: Int = kochLevel): Double =
         if (effOverride > 0f) effOverride.toDouble().coerceAtMost(charWpm.toDouble())
@@ -55,6 +87,9 @@ class SettingsStore(private val context: Context) {
         val sendWpm = intPreferencesKey("send_wpm")
         val swap = booleanPreferencesKey("swap_paddles")
         val lastDrill = stringPreferencesKey("last_drill")
+        val listenMinutes = intPreferencesKey("listen_minutes")
+        val listenGap = intPreferencesKey("listen_gap_sec")
+        val listenReveal = booleanPreferencesKey("listen_reveal")
     }
 
     val flow: Flow<Settings> = context.dataStore.data
@@ -77,6 +112,9 @@ class SettingsStore(private val context: Context) {
             p[K.sendWpm] = s.sendWpm.coerceIn(5, 35)
             p[K.swap] = s.swapPaddles
             p[K.lastDrill] = s.lastDrill
+            p[K.listenMinutes] = s.listenMinutes.coerceIn(1, 60)
+            p[K.listenGap] = s.listenGapSec.coerceIn(0, 15)
+            p[K.listenReveal] = s.listenReveal
         }
     }
 
@@ -96,6 +134,9 @@ class SettingsStore(private val context: Context) {
             sendWpm = p[K.sendWpm] ?: d.sendWpm,
             swapPaddles = p[K.swap] ?: d.swapPaddles,
             lastDrill = p[K.lastDrill] ?: d.lastDrill,
+            listenMinutes = p[K.listenMinutes] ?: d.listenMinutes,
+            listenGapSec = p[K.listenGap] ?: d.listenGapSec,
+            listenReveal = p[K.listenReveal] ?: d.listenReveal,
         )
     }
 }

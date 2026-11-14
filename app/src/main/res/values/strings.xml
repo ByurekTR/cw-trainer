@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">CW Trainer</string>
+    <string name="widget_name">CW Trainer</string>
+    <string name="widget_description">Streak, today\'s minutes, Koch lesson and a quick 2-minute drill</string>
 </resources>

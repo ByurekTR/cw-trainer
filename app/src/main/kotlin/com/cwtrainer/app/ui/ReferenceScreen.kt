@@ -31,6 +31,8 @@ import com.cwtrainer.core.morse.Timing
 fun ReferenceScreen(container: AppContainer, settings: Settings, onBack: () -> Unit) {
     val player = container.player
     LifecycleResumeEffect(player) {
+        container.listening.stop()
+        player.engine.listener = null
         player.engine.pitchHz = settings.pitchHz.toDouble()
         player.engine.conditions = BandConditions.CLEAN
         player.engine.setKeyer(null)

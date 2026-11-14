@@ -23,6 +23,7 @@ import com.cwtrainer.app.AppContainer
 import com.cwtrainer.app.data.ProgressStats
 import com.cwtrainer.app.data.Repository
 import com.cwtrainer.app.data.Settings
+import com.cwtrainer.app.listen.ListenStatus
 import com.cwtrainer.core.drill.Drills
 import com.cwtrainer.core.drill.ReceiveDrill
 import com.cwtrainer.core.drill.Recommender
@@ -84,6 +85,26 @@ fun HomeScreen(container: AppContainer, settings: Settings, open: (Route) -> Uni
             Spacer(Modifier.height(4.dp))
             Text(recommendation.drill.title, color = Color.Black, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
             Text(recommendation.reason, color = Color(0xCC000000), fontSize = 14.sp)
+        }
+
+        Spacer(Modifier.height(12.dp))
+        val listen by container.listening.state.collectAsStateWithLifecycle()
+        Panel(onClick = { open(Route.Listening) }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Background listening", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        when (listen.status) {
+                            ListenStatus.PLAYING -> "Playing: ${listen.elapsedSec / 60} of ${listen.totalSec / 60} min"
+                            ListenStatus.PAUSED -> "Paused at ${listen.elapsedSec / 60} of ${listen.totalSec / 60} min"
+                            else -> "10, 20 or 30 minutes from your queue, screen off"
+                        },
+                        fontSize = 14.sp, color = if (listen.active) Cw.Accent else Cw.Dim,
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Text("\u203A", color = Cw.Dim, fontSize = 28.sp)
+            }
         }
 
         Spacer(Modifier.height(20.dp))

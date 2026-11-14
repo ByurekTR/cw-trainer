@@ -37,13 +37,13 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @Composable
-fun SettingsScreen(container: AppContainer, settings: Settings, onBack: () -> Unit) {
+fun SettingsScreen(container: AppContainer, settings: Settings, onBack: () -> Unit, openData: () -> Unit) {
     val scope = rememberCoroutineScope()
     val update: ((Settings) -> Settings) -> Unit = { f -> scope.launch { container.repo.updateSettings(f) } }
     var confirmReset by remember { mutableStateOf(false) }
     val lettersDone = Koch.allLettersLearned(settings.kochLevel)
     // The pitch slider plays a preview; make sure the audio thread is not left running afterwards.
-    DisposableEffect(Unit) { onDispose { container.player.stop() } }
+    DisposableEffect(Unit) { onDispose { if (!container.listening.isActive) container.player.stop() } }
 
     Page("Settings", onBack = onBack) {
         Panel {
@@ -80,12 +80,14 @@ fun SettingsScreen(container: AppContainer, settings: Settings, onBack: () -> Un
             ) { v ->
                 val hz = (v / 10).roundToInt() * 10
                 update { it.copy(pitchHz = hz) }
-                // Let the new pitch be heard straight away.
-                val p = container.player
-                p.engine.pitchHz = hz.toDouble()
-                p.engine.conditions = BandConditions.CLEAN
-                p.start()
-                p.engine.play(Keyer.plan("K", Timing(settings.charWpm.toDouble())), leadInMs = 40.0)
+                // Let the new pitch be heard straight away (not on top of a listening session).
+                if (!container.listening.isActive) {
+                    val p = container.player
+                    p.engine.pitchHz = hz.toDouble()
+                    p.engine.conditions = BandConditions.CLEAN
+                    p.start()
+                    p.engine.play(Keyer.plan("K", Timing(settings.charWpm.toDouble())), leadInMs = 40.0)
+                }
             }
             Text("Volume follows your phone's media volume and works with headphones.", color = Cw.Dim, fontSize = 13.sp)
         }
@@ -169,10 +171,12 @@ fun SettingsScreen(container: AppContainer, settings: Settings, onBack: () -> Un
                 color = Cw.Dim, fontSize = 14.sp,
             )
             Spacer(Modifier.height(12.dp))
+            QuietButton("Export and backup", openData, Modifier.fillMaxWidth(), height = 52.dp)
+            Spacer(Modifier.height(8.dp))
             BigButton("Reset all progress", { confirmReset = true }, Modifier.fillMaxWidth(), color = Cw.SurfaceHi, textColor = Cw.Bad, height = 52.dp)
         }
         Spacer(Modifier.height(16.dp))
-        Text("CW Trainer 1.0", color = Cw.Dim, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        Text("CW Trainer 2.1", color = Cw.Dim, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(24.dp))
     }
 
@@ -193,7 +197,7 @@ fun SettingsScreen(container: AppContainer, settings: Settings, onBack: () -> Un
 }
 
 @Composable
-private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 16.sp)
@@ -206,7 +210,7 @@ private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChang
 
 /** Slider that shows its value while dragging and saves once, on release. */
 @Composable
-private fun SliderRow(
+internal fun SliderRow(
     title: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,

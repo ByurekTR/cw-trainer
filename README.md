@@ -3,20 +3,48 @@
 An offline Android Morse code trainer: Koch method, Farnsworth spacing, spaced repetition,
 realistic band conditions, and send practice on a touchscreen key.
 
-Kotlin + Jetpack Compose, minSdk 26, no permissions at all.
+Kotlin + Jetpack Compose, minSdk 26, no internet permission.
+
+## Version 2.1
+
+Added on top of version 1 (nothing removed):
+
+- **Background listening**: 10, 20 or 30 minute sessions drawn from the spaced-repetition
+  queue (groups, words, callsigns, QSO text, as your Koch lesson allows), a configurable gap
+  after each item and an optional on-screen reveal. Keeps playing with the screen off through
+  a foreground service with a media notification (play/pause, skip, stop); handles audio
+  focus and pauses when headphones are unplugged.
+- **Home-screen widget** (Glance): streak, today's minutes against the 15-minute goal, Koch
+  lesson, and a "Quick 2-min drill" button that opens straight into a session.
+- **Export and backup** (Settings > Export and backup): three CSV files through the share
+  sheet or into a folder you pick, and a JSON full backup with restore.
+
+### Permissions in 2.1
+
+Version 1 had none. Background playback cannot be done without these four:
+
+| Permission | Why |
+|---|---|
+| FOREGROUND_SERVICE, FOREGROUND_SERVICE_MEDIA_PLAYBACK | Keep the listening session alive with the screen off |
+| WAKE_LOCK | Stop the CPU sleeping mid-session (held only while sound is playing) |
+| POST_NOTIFICATIONS | Show the playback controls on Android 13+ (asked the first time you start a session) |
+
+Still no INTERNET permission. The widget library (Glance) brings in WorkManager, whose
+manifest asks for ACCESS_NETWORK_STATE and RECEIVE_BOOT_COMPLETED; both are stripped again in
+`AndroidManifest.xml`. If the widget ever misbehaves, that removal is the first thing to
+suspect. Export needs no storage permission: files go through the share sheet or the system
+file picker.
 
 ## Build status: read this first
 
-This project was written in an environment that could not download the Android SDK or any
-Maven dependency, so **the APK has not been built and the app has never run on a device**.
+Version 1 was built by GitHub Actions and installs. The 2.1 additions were written without
+access to the Android SDK, in the same way as version 1:
 
 | What | Status |
 |---|---|
-| `core` module (all training, timing and audio logic) | Compiled with Kotlin 2.2.20. 55 unit tests pass. |
-| `app` module (Compose UI, Room, DataStore, AudioTrack) | Type-checked against hand-written stand-ins for the Android and Compose APIs. Never compiled against the real SDK. |
-| Gradle build, APK, signing | Never run. Expect to fix a few things on the first real build. |
-| Install, airplane-mode run, listening test on a phone | Not done. |
-| "No INTERNET permission in the merged manifest" | Enforced two ways (see below), checked automatically by CI, not yet observed on a real APK. |
+| `core` additions (playlist generator, CSV, JSON backup) | Compiled with Kotlin 2.2.20. All 69 unit tests pass, including the export/restore round trip. |
+| `app` additions (service, notification, widget, export screens) | Type-checked against hand-written stand-ins for the Android and Glance APIs. Not yet compiled against the real SDK. |
+| Screen-off playback, notification controls, audio focus, unplugging headphones, the widget, share sheet, restore | Not run on a device. |
 
 ## Get the APK
 
@@ -103,12 +131,18 @@ core/   Pure Kotlin, no Android imports. Everything here runs and is tested on a
   srs/      Sm2 (review maths), SrsScheduler (weighted choice of what to drill next)
   content/  word lists, Q-codes, abbreviations, callsign generator, QSO generator
   drill/    DrillType interface + the seven drills, Scoring (alignment), Recommender
-  test/     TimingTest, KochTest, SrsTest, SendTest, DrillTest, AudioTest
+  listen/   PlaylistGenerator (listening material from the queue)
+  export/   CsvExport, BackupCodec (JSON backup), Json (tiny reader/writer)
+  test/     TimingTest, KochTest, SrsTest, SendTest, DrillTest, AudioTest, ExportTest, PlaylistTest
 
 app/    Android only.
   audio/    AudioPlayer: a thread that pulls samples from CwEngine into a low-latency AudioTrack
-  data/     Room (srs_items, sessions), DataStore (settings), Repository
+  data/     Room (srs_items, sessions), DataStore (settings), Repository, Exporter (share sheet
+            and file picker glue)
   session/  DrillController (runs a receive session), SendController (key input -> decoder)
+  listen/   ListeningController (the session: queue, gaps, clock), ListeningService (foreground
+            service, media notification, audio focus, wake lock, headphone unplug)
+  widget/   CwWidget (Glance)
   ui/       Compose screens: Home, Drill (copy / recognise / head copy / summary), Send,
             Progress, Reference, Settings; shared Components and theme
 ```
@@ -125,8 +159,8 @@ limiter.
 
 ### Privacy
 
-The manifest declares no permissions and explicitly removes `INTERNET` and
-`ACCESS_NETWORK_STATE` (`tools:node="remove"`) in case a library ever tries to add them.
+The manifest explicitly removes `INTERNET`, `ACCESS_NETWORK_STATE` and
+`RECEIVE_BOOT_COMPLETED` (`tools:node="remove"`) so no library can add them.
 No analytics, ads, accounts or network code exist anywhere in the project.
 
 ## Tests
@@ -144,22 +178,21 @@ No analytics, ads, accounts or network code exist anywhere in the project.
   schedule.
 - **Drills and content**: only unlocked characters are used, 100 unique words, every string
   is sendable, Turkish TA/TB/YM callsigns, unlock rules, answer alignment.
+- **Export and restore**: a backup decodes to exactly what was encoded and re-encodes
+  byte-for-byte; exact doubles and large numbers; foreign, truncated, damaged and newer-format
+  files are rejected with a readable message; CSV rows, values, quoting and grouping.
+- **Playlists**: only unlocked material, kinds widen with the lesson, weak characters are
+  heard more often, a playlist fills the requested time.
 - **Audio**: element lengths at half amplitude, out-of-band energy of shaped keying versus
   hard keying (the click test), silence between elements, measured SNR against the requested
   SNR, QSB depth, QRM pitch and level, no clipping in any preset.
 
-## Where version 2 plugs in
+## Still on the roadmap
 
-| v2 feature | Where it goes | What already exists for it |
+| Feature | Where it goes | What already exists for it |
 |---|---|---|
-| Microphone CW decoder | New `app/audio/MicDecoder` (AudioRecord + tone detector) | It only has to call `SendDecoder.keyDown/keyUp/tick`; decoding and speed tracking are done. Needs RECORD_AUDIO. |
-| Physical key or paddle (USB-OTG, Bluetooth) | Key-event handler in `MainActivity` forwarding to `SendController.straight()` / `paddle()` | Those two functions are the whole input abstraction; `IambicKeyer` reads two booleans and does not care who sets them. |
-| Pile-up simulator | New `PileupDrill : DrillType` in `core/drill`, added to `Drills.all` | `CwEngine` mixes any number of `CwVoice`s; QRM is already a second voice. Add a list of voices with their own pitch, speed and level. |
-| Background listening playlists | Foreground service that owns `AudioPlayer.start()/stop()` and feeds `CwEngine.play()` | Audio has no dependency on any Activity. `MainActivity.onStop()` currently stops the player; the service takes that over. |
-| Home-screen widget | `AppWidgetProvider` reading `Repository.sessions` | `ProgressStats` already computes streak and minutes today; a 2-minute drill is `Route.Drill("chars")` with a session-length argument. |
-| CSV export | One function in `Repository` | The `sessions` and `srs_items` tables hold everything; export is a dump of both through the system file picker (no permission needed). |
-| Turkish characters (Ç, Ğ, Ş, Ö, Ü) | Entries in `MorseCode.characters` plus an optional extension of `Koch.ORDER` | Symbols are strings throughout, so nothing assumes A-Z. |
-| QSO role-play | New `QsoRoleplayDrill` with `DrillMode.SEND` | `Qso` generates the other station's lines, `SendDecoder` reads your reply, `CwEngine` plays the answer. |
-
-Adding a drill never touches the home screen, history, spaced repetition or the
-"Continue training" recommender: they all iterate over `Drills.all`.
+| Microphone CW decoder | New `app/audio/MicDecoder` (AudioRecord + tone detector) | It only has to call `SendDecoder.keyDown/keyUp/tick`. Needs RECORD_AUDIO. |
+| Physical key or paddle (USB-OTG, Bluetooth) | Key-event handler in `MainActivity` forwarding to `SendController.straight()` / `paddle()` | Those two functions are the whole input abstraction. |
+| Pile-up simulator | New `PileupDrill : DrillType` in `core/drill`, added to `Drills.all` | `CwEngine` mixes any number of `CwVoice`s; QRM is already a second voice. |
+| Turkish characters (Ç, Ğ, Ş, Ö, Ü) | Entries in `MorseCode.characters` plus an optional extension of `Koch.ORDER` | Symbols are strings throughout. |
+| QSO role-play | New `QsoRoleplayDrill` with `DrillMode.SEND` | `Qso` generates the other station's lines, `SendDecoder` reads your reply. |

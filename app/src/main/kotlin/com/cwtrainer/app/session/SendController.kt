@@ -70,6 +70,7 @@ class SendController(private val c: AppContainer) : CwEngine.Listener {
     private var closed = false
 
     init {
+        c.listening.stop()
         engine.listener = this
         engine.pitchHz = initial.pitchHz.toDouble()
         engine.conditions = BandConditions.CLEAN

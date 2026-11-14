@@ -8,6 +8,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Upsert
+import com.cwtrainer.core.export.SessionRecord
 import com.cwtrainer.core.srs.SrsItem
 import kotlinx.coroutines.flow.Flow
 
@@ -47,12 +48,21 @@ data class SessionEntity(
     val correct: Int,
     val level: Int,
     val band: String,
-)
+) {
+    fun toRecord() = SessionRecord(startedAt, day, drillId, seconds, charWpm, effWpm, total, correct, level, band)
+}
+
+fun SessionRecord.toEntity() =
+    SessionEntity(startedAt = startedAt, day = day, drillId = drillId, seconds = seconds, charWpm = charWpm,
+        effWpm = effWpm, total = total, correct = correct, level = level, band = band)
 
 @Dao
 interface CwDao {
     @Query("SELECT * FROM srs_items")
     fun observeItems(): Flow<List<SrsItemEntity>>
+
+    @Query("SELECT * FROM srs_items")
+    suspend fun allItems(): List<SrsItemEntity>
 
     @Upsert
     suspend fun upsertItems(items: List<SrsItemEntity>)
@@ -63,8 +73,14 @@ interface CwDao {
     @Query("SELECT * FROM sessions ORDER BY startedAt")
     fun observeSessions(): Flow<List<SessionEntity>>
 
+    @Query("SELECT * FROM sessions ORDER BY startedAt")
+    suspend fun allSessions(): List<SessionEntity>
+
     @Insert
     suspend fun insertSession(session: SessionEntity)
+
+    @Insert
+    suspend fun insertSessions(sessions: List<SessionEntity>)
 
     @Query("DELETE FROM sessions")
     suspend fun clearSessions()

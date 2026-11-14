@@ -1,9 +1,11 @@
 package com.cwtrainer.app.data
 
+import com.cwtrainer.core.export.Backup
 import com.cwtrainer.core.srs.SrsItem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
@@ -37,6 +39,28 @@ class Repository(
         dao.clearItems()
         dao.clearSessions()
         store.update { it.copy(kochLevel = Settings().kochLevel, lastDrill = "") }
+    }
+
+    // Direct reads, for code that runs before the hot flows above have loaded (widget, export).
+    suspend fun loadSettings(): Settings = store.flow.first()
+    suspend fun loadSessions(): List<SessionEntity> = dao.allSessions()
+    suspend fun loadItems(): List<SrsItem> = dao.allItems().map { it.toCore() }
+
+    suspend fun createBackup(appVersion: String): Backup = Backup(
+        appVersion = appVersion,
+        exportedAt = System.currentTimeMillis(),
+        settings = loadSettings().toMap(),
+        items = loadItems(),
+        sessions = loadSessions().map { it.toRecord() },
+    )
+
+    /** Replaces all progress with the backup's. Settings in the backup are applied on top of the current ones. */
+    suspend fun restore(backup: Backup) {
+        dao.clearItems()
+        dao.clearSessions()
+        if (backup.items.isNotEmpty()) dao.upsertItems(backup.items.map { it.toEntity() })
+        if (backup.sessions.isNotEmpty()) dao.insertSessions(backup.sessions.map { it.toEntity() })
+        store.update { it.withMap(backup.settings).copy(lastDrill = "") }
     }
 
     companion object {

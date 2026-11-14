@@ -48,7 +48,7 @@ import com.cwtrainer.core.morse.MorseCode
 import kotlinx.coroutines.delay
 
 @Composable
-fun DrillScreen(container: AppContainer, settings: Settings, drillId: String, onExit: () -> Unit) {
+fun DrillScreen(container: AppContainer, settings: Settings, drillId: String, onExit: () -> Unit, quick: Boolean = false) {
     val drill = remember(drillId) { Drills.byId(drillId) }
     if (drill.mode == DrillMode.SEND) {
         SendScreen(container, settings, onExit)
@@ -57,7 +57,9 @@ fun DrillScreen(container: AppContainer, settings: Settings, drillId: String, on
     // "Again" starts a fresh session by changing the key.
     var run by remember { mutableIntStateOf(0) }
     key(run) {
-        val ctrl = remember { DrillController(container, drillId) }
+        // A quick drill (from the widget) is two minutes and starts by itself, the first time only.
+        val ctrl = remember { DrillController(container, drillId, if (quick) QUICK_SECONDS else null) }
+        LaunchedEffect(ctrl) { if (quick && run == 0) ctrl.start() }
         DisposableEffect(ctrl) { onDispose { ctrl.close() } }
         LifecycleResumeEffect(ctrl) {
             ctrl.onResume()
@@ -87,6 +89,8 @@ fun DrillScreen(container: AppContainer, settings: Settings, drillId: String, on
         }
     }
 }
+
+private const val QUICK_SECONDS = 120
 
 // ---- before the session ---------------------------------------------------------------------
 

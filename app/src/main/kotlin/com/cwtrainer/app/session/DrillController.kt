@@ -63,7 +63,12 @@ data class Summary(
  * Created when the drill screen opens and closed when it leaves; all state the UI shows is
  * Compose state on this object.
  */
-class DrillController(private val c: AppContainer, drillId: String) : CwEngine.Listener {
+class DrillController(
+    private val c: AppContainer,
+    drillId: String,
+    /** Fixed session length (the widget's quick drill); null = the length from Settings. */
+    sessionSecondsOverride: Int? = null,
+) : CwEngine.Listener {
     val drill: DrillType = Drills.byId(drillId)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val engine = c.player.engine
@@ -76,7 +81,7 @@ class DrillController(private val c: AppContainer, drillId: String) : CwEngine.L
     val charWpm: Double = initial.charWpm.toDouble()
     val effWpm: Double = if (drill === WordRecognitionDrill) charWpm else initial.effectiveWpm(level)
     private val groupLength = initial.groupLength
-    private val targetSeconds = initial.sessionMinutes * 60
+    private val targetSeconds = sessionSecondsOverride ?: (initial.sessionMinutes * 60)
     private val fistAllowed = initial.fist && Koch.allLettersLearned(level)
 
     private val items = HashMap<String, SrsItem>(c.repo.items.value)
@@ -129,6 +134,7 @@ class DrillController(private val c: AppContainer, drillId: String) : CwEngine.L
     private var closed = false
 
     init {
+        c.listening.stop()   // one thing at a time on the audio engine
         engine.listener = this
         engine.pitchHz = initial.pitchHz.toDouble()
         engine.conditions = BandConditions.CLEAN
