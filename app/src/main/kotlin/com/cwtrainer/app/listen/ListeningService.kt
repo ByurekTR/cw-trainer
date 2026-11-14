@@ -41,7 +41,7 @@ import kotlinx.coroutines.launch
  */
 class ListeningService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val controller: ListeningController get() = (application as CwApp).container.listening
+    private val listening: ListeningController get() = (application as CwApp).container.listening   // not "controller": MediaSession has its own
 
     private lateinit var audioManager: AudioManager
     private lateinit var notifications: NotificationManager
@@ -57,7 +57,7 @@ class ListeningService : Service() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
                 pausedByFocus = false
-                controller.pause()
+                listening.pause()
             }
         }
     }
@@ -66,20 +66,20 @@ class ListeningService : Service() {
         when (change) {
             AudioManager.AUDIOFOCUS_LOSS -> {
                 pausedByFocus = false
-                controller.pause()
+                listening.pause()
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                if (controller.state.value.status == ListenStatus.PLAYING) {
+                if (listening.state.value.status == ListenStatus.PLAYING) {
                     pausedByFocus = true
-                    controller.pause()
+                    listening.pause()
                 }
             }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> controller.duck(true)
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> listening.duck(true)
             AudioManager.AUDIOFOCUS_GAIN -> {
-                controller.duck(false)
+                listening.duck(false)
                 if (pausedByFocus) {
                     pausedByFocus = false
-                    controller.resume()
+                    listening.resume()
                 }
             }
         }
@@ -100,12 +100,12 @@ class ListeningService : Service() {
         session = MediaSession(this, "CwTrainerListening").apply {
             setCallback(object : MediaSession.Callback() {
                 override fun onPlay() = play()
-                override fun onPause() { pausedByFocus = false; controller.pause() }
-                override fun onSkipToNext() = controller.skip()
-                override fun onStop() = controller.stop()
+                override fun onPause() { pausedByFocus = false; listening.pause() }
+                override fun onSkipToNext() = listening.skip()
+                override fun onStop() = listening.stop()
             })
         }
-        scope.launch { controller.state.collect { onState(it) } }
+        scope.launch { listening.state.collect { onState(it) } }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -117,22 +117,22 @@ class ListeningService : Service() {
                 goForeground(buildNotification(preview))
                 if (requestFocus()) {
                     sessionStarted = true
-                    controller.start(minutes, intent.getIntExtra(EXTRA_GAP, 3), intent.getBooleanExtra(EXTRA_REVEAL, true))
+                    listening.start(minutes, intent.getIntExtra(EXTRA_GAP, 3), intent.getBooleanExtra(EXTRA_REVEAL, true))
                 } else {
                     shutDown()
                 }
             }
             ACTION_PLAY -> play()
-            ACTION_PAUSE -> { pausedByFocus = false; controller.pause() }
-            ACTION_SKIP -> controller.skip()
-            ACTION_STOP -> { controller.stop(); if (!sessionStarted) shutDown() }
+            ACTION_PAUSE -> { pausedByFocus = false; listening.pause() }
+            ACTION_SKIP -> listening.skip()
+            ACTION_STOP -> { listening.stop(); if (!sessionStarted) shutDown() }
             else -> if (!sessionStarted) shutDown()
         }
         return START_NOT_STICKY
     }
 
     private fun play() {
-        if (controller.state.value.status == ListenStatus.PAUSED && requestFocus()) controller.resume()
+        if (listening.state.value.status == ListenStatus.PAUSED && requestFocus()) listening.resume()
     }
 
     private fun onState(state: ListenState) {
@@ -173,7 +173,7 @@ class ListeningService : Service() {
     }
 
     override fun onDestroy() {
-        if (sessionStarted) controller.stop()
+        if (sessionStarted) listening.stop()
         registerNoisy(false)
         holdWakeLock(false)
         focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
@@ -184,7 +184,7 @@ class ListeningService : Service() {
 
     /** The user swiped the app away from recents: stop rather than play on invisibly. */
     override fun onTaskRemoved(rootIntent: Intent?) {
-        controller.stop()
+        listening.stop()
         super.onTaskRemoved(rootIntent)
     }
 
